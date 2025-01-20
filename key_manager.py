@@ -30,7 +30,7 @@ def save_keys_to_file(access_key, secret_key):
 
 def check_access_key_validity(access_key, secret_key):
     """
-    Check if the current access key is valid by attempting a simple IAM call.
+    Check if the current access key is valid by attempting a simple IAM action.
     """
     try:
         iam = boto3.client(
@@ -39,9 +39,9 @@ def check_access_key_validity(access_key, secret_key):
             aws_secret_access_key=secret_key,
         )
 
-        # Check if the current access key is associated with the user (no listing items)
-        response = iam.get_user()
-        print(f"Access key is valid for user: {response['User']['UserName']}")
+        # Use iam:ListAccessKeys to validate the key
+        iam.list_access_keys()
+        print("Access key is valid.")
         return True
     except Exception as e:
         print(f"Access key is invalid or expired: {e}")
