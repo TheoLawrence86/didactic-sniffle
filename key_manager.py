@@ -2,49 +2,83 @@ import boto3
 import json
 import os
 
-# Load keys from the saved file
+# Path to save the keys
 key_file = "ddap_keys.json"
 
 
 def load_keys_from_file():
     """
-    Load keys from the JSON file.
+    Load access keys from the JSON file.
     """
-    if not os.path.exists(key_file):
-        print(f"Key file {key_file} not found. Please run ddap_key_manager.py to generate keys.")
+    if os.path.exists(key_file):
+        with open(key_file, "r") as f:
+            keys = json.load(f)
+        return keys.get("AccessKeyId"), keys.get("SecretAccessKey")
+    else:
+        print(f"Key file {key_file} not found.")
+        return None, None
+
+
+def save_keys_to_file(access_key, secret_key):
+    """
+    Save the keys to a JSON file.
+    """
+    with open(key_file, "w") as f:
+        json.dump({"AccessKeyId": access_key, "SecretAccessKey": secret_key}, f)
+    print(f"New keys saved to {key_file}")
+
+
+def check_access_key_validity(access_key, secret_key):
+    """
+    Check if the current access key is valid by attempting a simple IAM call.
+    """
+    try:
+        iam = boto3.client(
+            "iam",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+
+        # Check if the current access key is associated with the user (no listing items)
+        response = iam.get_user()
+        print(f"Access key is valid for user: {response['User']['UserName']}")
+        return True
+    except Exception as e:
+        print(f"Access key is invalid or expired: {e}")
+        return False
+
+
+def create_new_access_key():
+    """
+    Create a new access key for the current IAM user.
+    """
+    try:
+        iam = boto3.client('iam')
+
+        # Create a new access key
+        response = iam.create_access_key()
+        access_key = response['AccessKey']['AccessKeyId']
+        secret_key = response['AccessKey']['SecretAccessKey']
+
+        print("New Access Key Created:")
+        print(f"AccessKeyId: {access_key}")
+        print(f"SecretAccessKey: {secret_key}")
+
+        # Save the keys to a file
+        save_keys_to_file(access_key, secret_key)
+
+    except Exception as e:
+        print(f"Error creating a new access key: {e}")
         exit(1)
-
-    with open(key_file, "r") as f:
-        keys = json.load(f)
-
-    return keys["AccessKeyId"], keys["SecretAccessKey"]
-
-
-def download_s3_objects(bucket_name, prefix='', local_dir='.'):
-    """
-    Download objects from S3.
-    """
-    access_key, secret_key = load_keys_from_file()
-
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-    )
-
-    kwargs = {'Bucket': bucket_name}
-    if prefix:
-        kwargs['Prefix'] = prefix
-
-    resp = s3.list_objects_v2(**kwargs)
-    for obj in resp.get('Contents', []):
-        key = obj['Key']
-        local_file_path = os.path.join(local_dir, key)
-        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
-        s3.download_file(bucket_name, key, local_file_path)
-        print(f"Downloaded {key} to {local_file_path}")
 
 
 if __name__ == "__main__":
-    # Example usage
-    download_s3_objects(bucket_name="673310479191-e2cspearhead", local_dir="/home/localadmin/noctua")
+    # Load keys from the file
+    access_key, secret_key = load_keys_from_file()
+
+    # Check if the key is valid
+    if access_key and secret_key and check_access_key_validity(access_key, secret_key):
+        print("The current access key is valid. No new key is needed.")
+    else:
+        print("The current access key is invalid or missing. Creating a new key...")
+        create_new_access_key()
